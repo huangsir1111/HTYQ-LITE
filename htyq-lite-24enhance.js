@@ -46,6 +46,12 @@
     return seasons[Math.floor((totalRounds / 20) % 4)] || '秋';
   }
 
+  // --- HTML 转义工具（C-4 修复） ---
+  function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   // --- 多步撤销系统 ---
   core.pushUndo = function(state, description) {
     if (!state.undoHistory) state.undoHistory = [];

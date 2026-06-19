@@ -146,7 +146,11 @@
       }
       // 方法4：generateOpts（远古版，兜底）
       if (typeof ctx.generateOpts === 'object') {
-        ctx.generateOpts.system_prompt = (ctx.generateOpts.system_prompt || '') + '\n\n' + content;
+        // H-4 修复: 保存原始 system_prompt，每次替换注入内容而非追加
+        if (!ctx.generateOpts.hasOwnProperty('_htyq_base_prompt')) {
+          ctx.generateOpts._htyq_base_prompt = ctx.generateOpts.system_prompt || '';
+        }
+        ctx.generateOpts.system_prompt = ctx.generateOpts._htyq_base_prompt + '\n\n' + content;
         return true;
       }
       console.warn('[HTYQ Lite] 所有注入方式均不可用');

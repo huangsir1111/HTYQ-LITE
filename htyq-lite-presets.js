@@ -253,13 +253,33 @@ window.HTYQ_LITE_PRESETS = (function() {
 
   function loadPresets() {
     var defaults = getDefaultPresets();
-    return [JSON.parse(JSON.stringify(defaults[0]))];
+    var saved = loadPresetsFromStorage();
+    if (saved && Array.isArray(saved) && saved.length > 0) {
+      // Merge: keep saved presets, ensure all default presets exist (by id)
+      var merged = saved.map(function(p) { return p; }); // shallow copy
+      var savedIds = {};
+      for (var si = 0; si < saved.length; si++) { savedIds[saved[si].id] = true; }
+      for (var di = 0; di < defaults.length; di++) {
+        if (!savedIds[defaults[di].id]) {
+          merged.push(JSON.parse(JSON.stringify(defaults[di])));
+        }
+      }
+      return merged;
+    }
+    return defaults.map(function(d) { return JSON.parse(JSON.stringify(d)); });
   }
 
   // ==================== 激活的预设 ====================
   function getActivePreset() {
-    var defaults = getDefaultPresets();
-    return JSON.parse(JSON.stringify(defaults[0]));
+    var all = loadPresets();
+    var activeId = null;
+    try { activeId = localStorage.getItem(ACTIVE_KEY); } catch(e) {}
+    if (activeId) {
+      for (var i = 0; i < all.length; i++) {
+        if (all[i].id === activeId) return all[i];
+      }
+    }
+    return all[0]; // fallback to first preset
   }
 
   function setActivePreset(presetId) {
@@ -330,7 +350,7 @@ window.HTYQ_LITE_PRESETS = (function() {
   function deletePreset(presetId) {
     var all = loadPresets();
     // 不允许删除内置预设
-    var builtinIds = { default: true };
+    var builtinIds = { standard: true, minimal: true, clean: true, custom: true };
     if (builtinIds[presetId]) return false;
 
     var idx = -1;
@@ -392,7 +412,7 @@ window.HTYQ_LITE_PRESETS = (function() {
         return { success: false, error: '无效的预设格式：缺少 id/labels/sections' };
       }
       // 确保不覆盖内置预设
-      var builtinIds = { default: true };
+      var builtinIds = { standard: true, minimal: true, clean: true, custom: true };
       if (builtinIds[data.id]) {
         // 导入为自定义
         data.id = 'imported_' + Date.now();
