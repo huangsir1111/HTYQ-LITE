@@ -350,6 +350,12 @@ window.HTYQ_LITE_EVOLUTION = (function() {
     const engineRules = `
 ## 世界演化强制规则（必须严格遵守）
 
+0. **正文优先**：所有推演必须以“本轮正文已经明确写出/暗示”的内容为依据。
+   - 不允许凭空新增正文里没有迹象的大事件、关系逆转、角色生死、势力大战、时间跳跃。
+   - 若本轮只是闲聊、观察、试探、赶路、吃饭、休息，则世界变化必须保持轻量，只能做背景层面的微推进。
+   - 任何重大变化都必须能从“用户消息 / AI回复”中指出触发依据。
+   - 如果正文没有给出足够依据，就维持已有状态，只允许推进已存在事件的少量进度、补充轻微流言、记录 NPC 合理的离线活动。
+
 1. **事件链**：至少维护 1~3 个事件。每个事件必须有：name, level(1-4), stage(萌芽/发酵/逼近/爆发/余波), currentRound, totalRounds(3-8), desc, trigger。
    - 若存在血仇备忘，必须创建对应的事件链。
    - 已存在的事件链按轮次推进（currentRound++），若 currentRound >= totalRounds 则 stage 改为"已爆发"。
@@ -362,16 +368,18 @@ window.HTYQ_LITE_EVOLUTION = (function() {
 4. **世界摘要(world_digest)**：150-200字，描述本轮世界后台推演（事件推进、流言演变、NPC独立行动、团体变化），**禁止提及{{user}}**。
    - 必须涉及至少一个势力的内部动向或至少一个NPC的非对话独立行动。
 5. **声誉(economy/reputation)**：可根据对话内容微调 marketTrend, fundsStatus 等。
-6. **世界每时每刻都在变化。如果你认为没有变化，请重新阅读对话。至少找出一件事来更新。**
+6. **世界每时每刻都在变化，但变化强度必须服从正文。若正文影响很弱，只能输出弱变化；不要为了“有变化”而胡乱制造大变化。**
 7. **团体进度**：每个势力必须包含进度描述（纯文字），凝聚力、资源储备需定期波动。
-8. **timeEstimateMinutes**：必填。根据对话内容估算实际经过的世界时间，单位分钟。闲聊1-5分钟，普通场景5-30分钟，跨越时间场景按实际估算（如"三天后"填4320）。最少1分钟，最多10080分钟（7天）。
+8. **timeEstimateMinutes**：必填。根据正文内容估算实际经过的世界时间，单位分钟。闲聊1-5分钟，普通场景5-30分钟，跨越时间场景按正文明确表述估算（如"三天后"填4320）。最少1分钟，最多10080分钟（7天）。
+   - 未出现明确时间跳跃时，禁止擅自估算出数小时/数天。
 
 9. **血仇备忘录（bloodFeudMemo）**：当剧情中产生了不可化解的血仇（如核心人物被杀、至亲被害），必须在此数组中添加条目。格式：[{ faction, reason, status, lastActionRound, nextAttackRound }]。status 初始为"追踪中"。已有条目可更新状态（如"追杀中"、"已终结"）。该数组由模型维护。
 10. **势力关系（factionRelations）**：可选但推荐。当势力之间的关系发生变化时，输出此数组。每条格式：{ factionA, factionB, relation, level, trend }。relation 只能用：血盟/盟友/友好/中立/冷淡/紧张/敌对/世仇。无变化可不输出。
 11. **因果链（causalChain）**：可选。当本轮发生了清晰的因果关系（事件A导致事件B，或玩家行为导致势力变化等）时输出。每条格式：{ event, progress, manifestation }。无强因果关系可不输出。
 12. **一致性约束**：新生成的事件不可删除已有事件（除非已锁定）。新势力不应与旧势力内容冲突。
 
-13. **NPC独立行动（npcActivities）**：可选数组。如果对话中涉及了重要NPC，或emotionMap中有活跃NPC，请为每个NPC生成本轮的独立行动（不在玩家面前的离线行为）。每条格式：{ npc, activity, location, type(work/scheming/travel/rest/social) }。这些行动让世界不在场时也保持活力。非活跃轮次可不输出。
+13. **NPC独立行动（npcActivities）**：可选数组。只有当正文涉及了重要NPC，或现有状态中该 NPC 本就活跃时，才为其生成独立行动。每条格式：{ npc, activity, location, type(work/scheming/travel/rest/social) }。
+   - 独立行动只能作为正文外延补充，不能反客为主推动主线，更不能制造正文没有铺垫的重大转折。
 
 14. **剧情线索（plotThreads）**：可选数组。每个世界有若干条并行的剧情线索在推进。每条格式：{ id, title, progress(0-100), phase, description, status(active/frozen/completed/failed) }。已存在的线索应按轮次推进进度；已完结的线索应标记completed或failed。
 15. **成就检测（achievements）**：可选数组。如果本轮对话中发生了值得记录的特殊成就（如第一次杀人、经典台词等），请在此输出。每条格式：{ id, title, desc, icon, note }。预设成就ID从列表中选用；不在列表中的用auto_前缀。无特别事件可不输出。
@@ -477,7 +485,7 @@ ${retryHint}
   ]
 }
 
-注意：宁可生成合理的变化，也不要返回空数组。如果你觉得"没有变化"，请重新分析对话。`;
+注意：宁可生成合理的小变化，也不要脱离正文编造大变化。如果你觉得"变化很少"，就输出轻量更新，而不是强行制造戏剧化转折。`;
 
     try {
       const rawResult = await callApi(prompt, 2000, 0.7);
@@ -769,8 +777,8 @@ ${retryHint}
       if (newHeatLevel === '冷' && age >= 5) {
         toRemove.push(i);
       }
-      // 热度为热且年龄超过 8 轮且随机命中 → 异变（旧流言异变为新版本）
-      if (newHeatLevel === '热' && age >= 8 && Math.random() < 0.15) {
+      // 热度为热时也不再自动异变为全新内容，避免脱离正文自行演化
+      if (false) {
         toMutate.push(i);
       }
     }

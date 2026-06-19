@@ -153,7 +153,7 @@
   // 第一部分：包装演化函数 & 成就变更监听
   // ============================================================
 
-  var evolution = window._HTYQ_LITE_EVOLUTION;
+  var evolution = window.HTYQ_LITE_EVOLUTION;
   var _origEvolve = null;
   var _previousAchCount = 0;
   var _evolveInProgress = false;

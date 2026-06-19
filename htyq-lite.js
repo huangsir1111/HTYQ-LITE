@@ -398,7 +398,7 @@
               });
               if (!hasThread) {
                 var remaining = ev.totalRounds - ev.currentRound;
-                var initialProgress = Math.floor((1 - remaining / ev.totalRounds) * 40) || 10;
+                var initialProgress = Math.max(1, Math.min(15, Math.floor((1 - remaining / ev.totalRounds) * 20) || 5));
                 core.addPlotThread(latestState, {
                   id: core.generateThreadId(),
                   title: ev.name,

@@ -211,12 +211,14 @@ window.HTYQ_LITE_UI = (function() {
     var used = 0;
     if (state.memories) used += state.memories.length * 35;
     if (state.events) used += state.events.length * 20;
-    if (state.npcActivities) used += Object.keys(state.npcActivities).length * 15;
-    if (state.factions) used += Object.keys(state.factions).length * 25;
+    if (state.npcActivityLog) used += state.npcActivityLog.length * 15;
+    if (state.npcSchedules) used += Object.keys(state.npcSchedules).length * 10;
+    if (state.factions) used += state.factions.length * 25;
     if (state.plotThreads) used += state.plotThreads.length * 40;
-    if (state.portraits) used += Object.keys(state.portraits).length * 60;
+    if (state.characterPortraits) used += Object.keys(state.characterPortraits).length * 60;
     if (state.characterLifecycles) used += Object.keys(state.characterLifecycles).length * 20;
     if (state.rumors) used += state.rumors.length * 15;
+    if (state.worldLaws) used += Object.keys(state.worldLaws.dimensions || {}).length * 12 + ((state.worldLaws.customRules || []).length * 16);
     used = Math.min(used, total);
     var pct = Math.round((used / total) * 100);
     return { used: used, total: total, pct: pct };
@@ -435,7 +437,7 @@ window.HTYQ_LITE_UI = (function() {
     var tok = (typeof estimateTokenUsage === 'function') ? estimateTokenUsage(state) : { used: 0, total: 4096, pct: 0 };
     html += '<div class="card"><div class="card-title">📊 Token 用量 <span class="bdg">资源监控</span></div>';
     html += '<div class="htyq-token-bar"><span>已用 '+tok.used+' / '+tok.total+'</span><div class="htyq-token-track"><div class="htyq-token-fill" style="width:'+tok.pct+'%;"></div></div><span style="color:'+(tok.pct>80?'#f85149':tok.pct>50?'#d29922':'#7ee787')+'">'+tok.pct+'%</span></div>';
-    html += '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"><span class="sm gray">记忆: '+(state.memories?state.memories.length+'条':'0')+'</span><span class="sm gray">事件: '+(state.events?state.events.length+'个':'0')+'</span><span class="sm gray">NPC: '+(state.npcActivities?Object.keys(state.npcActivities).length+'名':'0')+'</span><span class="sm gray">势力: '+(state.factions?state.factions.length+'个':'0')+'</span><span class="sm gray">剧情线: '+(state.plotThreads?state.plotThreads.length:'0')+'</span></div></div>';
+    html += '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;"><span class="sm gray">记忆: '+(state.memories?state.memories.length+'条':'0')+'</span><span class="sm gray">事件: '+(state.events?state.events.length+'个':'0')+'</span><span class="sm gray">NPC: '+npcCount+'名</span><span class="sm gray">画像: '+portraitCount+'份</span><span class="sm gray">势力: '+(state.factions?state.factions.length+'个':'0')+'</span><span class="sm gray">剧情线: '+(state.plotThreads?state.plotThreads.length:'0')+'</span></div></div>';
 
     // ★ v3.0.1: 注入预览
     html += '<div class="card"><div class="card-title">💉 完整注入预览 <span class="bdg">上下文构成</span></div>';
@@ -924,10 +926,10 @@ window.HTYQ_LITE_UI = (function() {
     // faction relations
     var facRels = state.factionRelations || [];
     if (facRels.length) {
-      html += '<div class="mt-8"><div class="sm" style="font-weight:600;margin-bottom:4px;">\ud83d\udd17 \u52bf\u529b\u5173\u7cfb\u7f51</div>';
+      html += '<div class="mt-8"><div class="sm" style="font-weight:600;margin-bottom:4px;">🔗 势力关系网</div>';
       for (var fri = 0; fri < facRels.length; fri++) {
         var fr = facRels[fri];
-        html += '<div class="sm gray" style="margin-bottom:2px;">'+esc(fr.from||'')+' \u2192 '+esc(fr.to||'')+' <span style="color:'+(fr.type==='\u654c\u5bf9'?'#f85149':'#7ee787')+'">['+esc(fr.type||'')+']</span></div>';
+        html += '<div class="sm gray" style="margin-bottom:2px;">'+esc(fr.factionA||fr.from||'')+' ↔ '+esc(fr.factionB||fr.to||'')+' <span style="color:'+((fr.relation||fr.type)==='敌对'?'#f85149':'#7ee787')+'">['+esc(fr.relation||fr.type||'')+']</span>'+(fr.trend ? ' <span class="gray">('+esc(fr.trend)+')</span>' : '')+'</div>';
       }
       html += '</div>';
     }
@@ -1033,7 +1035,7 @@ window.HTYQ_LITE_UI = (function() {
     html += '</div>';
 
     // world law preview
-    var wlp = state.worldLaw || {};
+    var wlp = state.worldLaws || state.worldLaw || {};
     html += '<div class="card"><div class="card-title">\ud83c\udf10 \u4e16\u754c\u6cd5\u5219\u9884\u89c8 <span class="bdg">'+(wlp.dimensions?Object.keys(wlp.dimensions).length:0)+' \u7ef4\u5ea6</span></div>';
     html += '<div class="sm gray">';
     if (wlp.dimensions) {
@@ -1181,9 +1183,10 @@ window.HTYQ_LITE_UI = (function() {
               }
             }
           }
-          if (st.npcActivities && st.npcActivities[npc]) {
-            st.npcActivities[npc].currentActivity = newAct;
-            if (newLoc) st.npcActivities[npc].location = newLoc;
+          if (st.npcSchedules && st.npcSchedules[npc]) {
+            st.npcSchedules[npc].lastKnownActivity = newAct;
+            if (newLoc) st.npcSchedules[npc].lastKnownLocation = newLoc;
+            st.npcSchedules[npc].lastUpdatedRound = st.round || 0;
           }
           core.saveState(st);
           toast('✅ 已更新 '+npc+' 的日程');
