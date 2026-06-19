@@ -16,22 +16,32 @@ window.HTYQ_LITE_SLASH = (function() {
   const evolution = window.HTYQ_LITE_EVOLUTION;
   const ui = window.HTYQ_LITE_UI;
 
+  var _slashEvolving = false;  // M-11: 防重入锁
+
   // ========== /world ==========
   async function handleWorld(args) {
     const state = core.loadState();
     if (args === 'status') {
-      const eventsActive = state.events.filter(e => e.status !== '已爆发').length;
-      const eventsErupted = state.events.filter(e => e.status === '已爆发').length;
-      return `🌍 **世界状态**\n轮次：${state.round}\n摘要：${state.worldDigest}\n声誉：江湖「${state.reputation.jianghu}」官府「${state.reputation.official}」\n事件链：${eventsActive}个活跃 / ${eventsErupted}个已爆发\n血仇：${state.bloodFeudMemo.length}个\n记忆：${state.memories.length}条 / ${state.chapterSummaries.length}章摘要 / ${state.volumeSummaries.length}卷摘要\n情感实体：${Object.keys(state.emotionMap).length}个`;
+      // M-1 修复: 防御 state.events 为空
+      var events = state.events || [];
+      const eventsActive = events.filter(function(e) { return e.status !== '已爆发'; }).length;
+      const eventsErupted = events.filter(function(e) { return e.status === '已爆发'; }).length;
+      return '🌍 **世界状态**\n轮次：' + state.round + '\n摘要：' + state.worldDigest + '\n声誉：江湖「' + (state.reputation.jianghu || '?') + '」官府「' + (state.reputation.official || '?') + '」\n事件链：' + eventsActive + '个活跃 / ' + eventsErupted + '个已爆发\n血仇：' + (state.bloodFeudMemo || []).length + '个\n记忆：' + (state.memories || []).length + '条 / ' + (state.chapterSummaries || []).length + '章摘要 / ' + (state.volumeSummaries || []).length + '卷摘要\n情感实体：' + Object.keys(state.emotionMap || {}).length + '个';
     } else if (args === 'evolve' || args === '') {
-      // 手动推演
-      const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
-      const lastMsg = ctx?.chat?.[ctx.chat.length - 1];
-      const userMsg = lastMsg?.is_user ? (lastMsg.mes || '') : '';
-      const aiMsg = !lastMsg?.is_user ? (lastMsg?.mes || '') : '';
-      const success = await evolution.evolve(state, userMsg, aiMsg);
-      if (ui && ui.refresh) ui.refresh();
-      return success ? '🔄 手动推演已触发，世界前进了1轮' : '❌ 手动推演失败，世界状态未改变';
+      // M-11 修复: 防重入锁
+      if (_slashEvolving) return '⏳ 正在推演中，请稍后再试';
+      _slashEvolving = true;
+      try {
+        const ctx = (typeof SillyTavern !== 'undefined' && SillyTavern.getContext) ? SillyTavern.getContext() : null;
+        const lastMsg = ctx && ctx.chat ? ctx.chat[ctx.chat.length - 1] : null;
+        const userMsg = lastMsg && lastMsg.is_user ? (lastMsg.mes || '') : '';
+        const aiMsg = lastMsg && !lastMsg.is_user ? (lastMsg.mes || '') : '';
+        const success = await evolution.evolve(state, userMsg, aiMsg);
+        if (ui && ui.refresh) ui.refresh();
+        return success ? '🔄 手动推演已触发，世界前进了1轮' : '❌ 手动推演失败，世界状态未改变';
+      } finally {
+        _slashEvolving = false;
+      }
     } else if (args === 'toggle') {
       if (ui && ui.togglePanel) {
         ui.togglePanel();
@@ -52,12 +62,30 @@ window.HTYQ_LITE_SLASH = (function() {
     if (args.startsWith('recall ') || args.startsWith('search ')) {
       const keyword = args.includes(' ') ? args.slice(args.indexOf(' ') + 1).trim() : '';
       if (!keyword) return '请提供关键词，如 /memory recall 张三';
-      const tags = [keyword];
-      const recalled = memory.recallMemories(state, tags, 10);
-      if (recalled.length === 0) return '未找到相关记忆';
-      let result = '📖 **相关记忆**\n';
-      for (const m of recalled) {
-        result += `[第${m.round}轮] [★${'★'.repeat(Math.min(3, m.importance))}] ${m.summary}\n`;
+      // M-2 修复: 直接在记忆的 summary 和 tags 中搜索关键词
+      var mems = state.memories || [];
+      var matched = [];
+      var lowKw = keyword.toLowerCase();
+      for (var mi = 0; mi < mems.length; mi++) {
+        var m = mems[mi];
+        var inSummary = (m.summary || m.context || '').toLowerCase().indexOf(lowKw) >= 0;
+        var inTags = (m.tags && m.tags.entities && m.tags.entities.join(',').toLowerCase().indexOf(lowKw) >= 0);
+        if (inSummary || inTags) matched.push(m);
+      }
+      // 也检查章节和卷摘要
+      var chs = state.chapterSummaries || [];
+      for (var ci = 0; ci < chs.length; ci++) {
+        if ((chs[ci].summary || chs[ci].text || '').toLowerCase().indexOf(lowKw) >= 0) {
+          matched.push({ summary: '[章摘要] ' + (chs[ci].summary || ''), round: chs[ci].round || '?', importance: 4, tags: {} });
+        }
+      }
+      matched.sort(function(a, b) { return (b.importance || 1) - (a.importance || 1); });
+      matched = matched.slice(0, 10);
+      if (matched.length === 0) return '未找到与「' + keyword + '」相关的记忆';
+      var result = '📖 **相关记忆（' + keyword + '）**\n';
+      for (var qi = 0; qi < matched.length; qi++) {
+        var mc = matched[qi];
+        result += '[第' + (mc.round || '?') + '轮] [' + '★'.repeat(Math.min(3, mc.importance || 1)) + '] ' + (mc.summary || '') + '\n';
       }
       return result;
     } else if (args === 'summarize') {
@@ -66,7 +94,7 @@ window.HTYQ_LITE_SLASH = (function() {
       await memory.mergeChapterSummary(state, start, lastRound);
       return `📚 已合并第 ${start}-${lastRound} 轮的章节摘要`;
     } else if (args === 'stats') {
-      return `📊 **记忆统计**\n原始记忆：${state.memories.length} 条\n章节摘要：${state.chapterSummaries.length} 条\n卷摘要：${state.volumeSummaries.length} 条\n情感实体：${Object.keys(state.emotionMap).length} 个\n当前轮次：${state.round}`;
+      return '📊 **记忆统计**\n原始记忆：' + (state.memories || []).length + ' 条\n章节摘要：' + (state.chapterSummaries || []).length + ' 条\n卷摘要：' + (state.volumeSummaries || []).length + ' 条\n情感实体：' + Object.keys(state.emotionMap || {}).length + ' 个\n当前轮次：' + state.round;
     } else {
       return handleMemory('help');
     }

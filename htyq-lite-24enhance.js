@@ -53,13 +53,27 @@
   }
 
   // --- 多步撤销系统 ---
+  var MAX_UNDO = 20;        // H-2: 从 50 减到 20 个
+  var UNDO_KEEP_KEYS = [    // H-2: 只保存核心状态，排除大头数组
+    'round', 'worldDigest', 'events', 'factions', 'factionRelations',
+    'rumors', 'reputation', 'economy', 'worldLaws', 'storyType',
+    'bloodFeudMemo', 'causalChain', 'emotionMap', 'achievements',
+    'npcActivityLog', 'plotThreads', 'characterPortraits', 'combat',
+    'config', 'inWorldMinutes', 'driveMode', '_undoDesc', '_undoTime'
+  ];
   core.pushUndo = function(state, description) {
     if (!state.undoHistory) state.undoHistory = [];
-    var snapshot = JSON.parse(JSON.stringify(state));
+    // H-2: 轻量快照 — 只序列化关键字段，不存 memories/chapterSummaries
+    var snapshot = {};
+    for (var ki = 0; ki < UNDO_KEEP_KEYS.length; ki++) {
+      var k = UNDO_KEEP_KEYS[ki];
+      if (state[k] !== undefined) snapshot[k] = JSON.parse(JSON.stringify(state[k]));
+    }
     snapshot._undoDesc = description || '第 ' + (state.round || 0) + ' 轮快照';
     snapshot._undoTime = Date.now();
+    snapshot._memCount = (state.memories || []).length;
     state.undoHistory.push(snapshot);
-    if (state.undoHistory.length > 50) state.undoHistory.shift();
+    if (state.undoHistory.length > MAX_UNDO) state.undoHistory.shift();
     core.saveState(state);
   };
 
@@ -120,11 +134,11 @@
     core.saveState(state);
   };
 
-  // --- 记忆关联 ---
-  core.addMemoryAssociation = function(state, memIndexA, memIndexB, label) {
+  // --- 记忆关联（H-3 修复: 使用记忆 ID 而非数组索引）---
+  core.addMemoryAssociation = function(state, memIdA, memIdB, label) {
     if (!state.memoryAssociations) state.memoryAssociations = [];
     state.memoryAssociations.push({
-      a: memIndexA, b: memIndexB,
+      a: memIdA, b: memIdB,
       label: label || '关联',
       round: state.round || 0
     });
